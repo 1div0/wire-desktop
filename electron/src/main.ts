@@ -242,6 +242,7 @@ const showMainWindow = async (mainWindowState: windowStateKeeper.State): Promise
       contextIsolation: false,
       nodeIntegration: false,
       preload: PRELOAD_JS,
+      sandbox: false,
       webviewTag: true,
     },
     width: mainWindowState.width,
@@ -339,15 +340,10 @@ const showMainWindow = async (mainWindowState: windowStateKeeper.State): Promise
     }
   });
 
-  app.on('gpu-process-crashed', event => {
-    logger.error('GPU process crashed. Will reload the window.');
+  app.on('child-process-gone', (event, details) => {
+    logger.error('child process gone');
     logger.error(event);
-    try {
-      main.reload();
-    } catch (error) {
-      showErrorDialog(`Could not reload the window: ${(error as any).message}`);
-      logger.error('Could not reload the window:', error);
-    }
+    logger.error(details);
   });
 
   main.webContents.setZoomFactor(1);
@@ -616,6 +612,7 @@ class ElectronWrapperInit {
             webPreferences.preload = PRELOAD_RENDERER_JS;
             webPreferences.spellcheck = enableSpellChecking;
             webPreferences.webSecurity = true;
+            webPreferences.sandbox = false;
           });
           break;
         }
@@ -670,32 +667,6 @@ class ElectronWrapperInit {
           }
 
           contents.session.setCertificateVerifyProc(setCertificateVerifyProc);
-
-          // Override remote Access-Control-Allow-Origin for localhost (CORS bypass)
-          const isLocalhostEnvironment =
-            EnvironmentUtil.getEnvironment() == EnvironmentUtil.BackendType.LOCALHOST.toUpperCase();
-          if (isLocalhostEnvironment) {
-            const filter: WebRequestFilter = {
-              urls: config.backendOrigins.map(value => `${value}/*`),
-            };
-
-            const listenerOnHeadersReceived = (
-              details: OnHeadersReceivedListenerDetails,
-              callback: (response: HeadersReceivedResponse) => void,
-            ): void => {
-              const responseHeaders = {
-                'Access-Control-Allow-Credentials': ['true'],
-                'Access-Control-Allow-Origin': [EnvironmentUtil.URL_WEBAPP.LOCALHOST],
-              };
-
-              callback({
-                cancel: false,
-                responseHeaders: {...details.responseHeaders, ...responseHeaders},
-              });
-            };
-
-            contents.session.webRequest.onHeadersReceived(filter, listenerOnHeadersReceived);
-          }
 
           contents.on('before-input-event', (_event, input) => {
             if (input.type === 'keyUp' && input.key === 'Alt') {
