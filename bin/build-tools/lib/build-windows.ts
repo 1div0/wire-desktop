@@ -22,7 +22,7 @@ import fs from 'fs-extra';
 import path from 'path';
 
 import {backupFiles, getLogger, restoreFiles} from '../../bin-utils';
-import {getCommonConfig} from './commonConfig';
+import {flipElectronFuses, getCommonConfig} from './commonConfig';
 import {WindowsConfig} from './Config';
 
 const libraryName = path.basename(__filename).replace('.ts', '');
@@ -60,7 +60,13 @@ export async function buildWindowsConfig(
     buildVersion: commonConfig.buildNumber,
     dir: '.',
     icon: `${commonConfig.electronDirectory}/img/logo.ico`,
-    ignore: new RegExp(`${commonConfig.electronDirectory}/renderer/src`),
+    ignore: [
+      new RegExp(`${commonConfig.electronDirectory}/renderer/src$`),
+      new RegExp(`${commonConfig.electronDirectory}/src$`),
+      new RegExp(`/\\.yarn$`),
+      new RegExp(`/bin$`),
+      new RegExp(`/jenkins$`),
+    ],
     name: commonConfig.name,
     out: commonConfig.buildDir,
     overwrite: true,
@@ -109,6 +115,8 @@ export async function buildWindowsWrapper(
   try {
     const [buildDir] = await electronPackager(packagerConfig);
     logger.log(`Built package in "${buildDir}".`);
+
+    await flipElectronFuses(path.join(buildDir, `${packagerConfig.name}.exe`));
   } catch (error) {
     logger.error(error);
   }

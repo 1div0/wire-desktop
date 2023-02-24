@@ -37,7 +37,7 @@ node('built-in') {
   def version = env.WRAPPER_BUILD.tokenize('#')[1]
   echo('version: ' + version)
   def buildNumber = version.tokenize('.')[2]
-  def NODE = tool name: 'node-v14.15.3', type: 'nodejs'
+  def NODE = tool name: 'node-v16.17.1', type: 'nodejs'
   env.DRY_RUN = params.DRY_RUN ? "--dry-run" : ""
 
   stage('Get build artifacts') {
@@ -65,7 +65,7 @@ node('built-in') {
         sh 'node -v'
         sh 'npm -v'
         sh 'npm install -g yarn'
-        sh 'yarn --ignore-scripts'
+        sh 'yarn'
       }
     } catch (e) {
       wireSend secret: "$jenkinsbot_secret", message: "**Could not get build artifacts of ${version} from ${projectName}** see: ${JOB_URL}"

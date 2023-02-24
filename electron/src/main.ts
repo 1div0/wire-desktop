@@ -31,6 +31,7 @@ import {
   WebContents,
   desktopCapturer,
   safeStorage,
+  HandlerDetails,
 } from 'electron';
 import * as remoteMain from '@electron/remote/main';
 
@@ -86,7 +87,7 @@ const WINDOW_SIZE = {
   DEFAULT_HEIGHT: 768,
   DEFAULT_WIDTH: 1024,
   MIN_HEIGHT: 512,
-  MIN_WIDTH: 760,
+  MIN_WIDTH: 398,
 };
 
 let proxyInfoArg: URL | undefined;
@@ -175,6 +176,7 @@ const bindIpcEvents = (): void => {
   });
 
   ipcMain.on(EVENT_TYPE.ACTION.NOTIFICATION_CLICK, () => WindowManager.showPrimaryWindow());
+  ipcMain.on(EVENT_TYPE.WEBAPP.APP_LOADED, () => WindowManager.flushActionsQueue());
 
   ipcMain.on(EVENT_TYPE.UI.BADGE_COUNT, (_event, {count, ignoreFlash}: {count?: number; ignoreFlash?: boolean}) => {
     tray.showUnreadCount(main, count, ignoreFlash);
@@ -240,6 +242,7 @@ const showMainWindow = async (mainWindowState: windowStateKeeper.State): Promise
       contextIsolation: false,
       nodeIntegration: false,
       preload: PRELOAD_JS,
+      sandbox: false,
       webviewTag: true,
     },
     width: mainWindowState.width,
@@ -297,17 +300,8 @@ const showMainWindow = async (mainWindowState: windowStateKeeper.State): Promise
   });
 
   // Handle the new window event in the main Browser Window
-  // TODO: Replace with `webContents.setWindowOpenHandler()`
-  main.webContents.on('new-window', async (event, url) => {
-    event.preventDefault();
-
-    // Ensure the link does not come from a webview
-    if (typeof (event as any).sender.viewInstanceId !== 'undefined') {
-      logger.log('New window was created from a webview, aborting.');
-      return;
-    }
-
-    await WindowUtil.openExternal(url);
+  main.webContents.setWindowOpenHandler(details => {
+    return {action: 'deny'};
   });
 
   main.on('focus', () => {
@@ -346,15 +340,10 @@ const showMainWindow = async (mainWindowState: windowStateKeeper.State): Promise
     }
   });
 
-  app.on('gpu-process-crashed', event => {
-    logger.error('GPU process crashed. Will reload the window.');
+  app.on('child-process-gone', (event, details) => {
+    logger.error('child process gone');
     logger.error(event);
-    try {
-      main.reload();
-    } catch (error) {
-      showErrorDialog(`Could not reload the window: ${(error as any).message}`);
-      logger.error('Could not reload the window:', error);
-    }
+    logger.error(details);
   });
 
   main.webContents.setZoomFactor(1);
@@ -562,17 +551,69 @@ class ElectronWrapperInit {
 
   // <webview> hardening
   webviewProtection(): void {
-    const openLinkInNewWindow = (
-      event: ElectronEvent,
-      url: string,
-      frameName: string,
-      _disposition: string,
-      options: BrowserWindowConstructorOptions,
-    ): Promise<void> => {
-      event.preventDefault();
+    const openLinkInNewWindowHandler = (
+      details: HandlerDetails,
+    ): {action: 'deny'} | {action: 'allow'; overrideBrowserWindowOptions?: BrowserWindowConstructorOptions} => {
+      if (SingleSignOn.isSingleSignOnLoginWindow(details.frameName)) {
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            alwaysOnTop: true,
+            backgroundColor: '#FFFFFF',
+            fullscreen: false,
+            fullscreenable: false,
+            height: 600,
+            maximizable: false,
+            minimizable: false,
+            modal: false,
+            movable: true,
+            parent: main,
+            resizable: false,
+            title: SingleSignOn.getWindowTitle(details.url),
+            titleBarStyle: 'default',
+            useContentSize: true,
+            webPreferences: {
+              allowRunningInsecureContent: false,
+              backgroundThrottling: false,
+              contextIsolation: true,
+              devTools: false,
+              disableBlinkFeatures: '',
+              experimentalFeatures: false,
+              images: true,
+              javascript: true,
+              nodeIntegration: false,
+              nodeIntegrationInWorker: false,
+              offscreen: false,
+              partition: '',
+              plugins: false,
+              preload: '',
+              sandbox: true,
+              scrollBounce: true,
+              spellcheck: false,
+              textAreasAreResizable: false,
+              webSecurity: true,
+              webgl: false,
+              webviewTag: false,
+            },
+            width: 480,
+          },
+        };
+      }
 
+      this.logger.log('Opening an external window from a webview.');
+      void WindowUtil.openExternal(details.url);
+      return {action: 'deny'};
+    };
+
+    const openLinkInNewWindow = (
+      win: BrowserWindow,
+      url: string,
+      event: ElectronEvent,
+      frameName: string,
+      options: BrowserWindowConstructorOptions,
+    ): Promise<void> | void => {
       if (SingleSignOn.isSingleSignOnLoginWindow(frameName)) {
-        const singleSignOn = new SingleSignOn(main, event, url, options).init();
+        const singleSignOn = new SingleSignOn(win, event, url, options).init();
         return new Promise(() => {
           singleSignOn
             .then(sso => {
@@ -582,9 +623,6 @@ class ElectronWrapperInit {
             .catch(error => console.info(error));
         });
       }
-
-      this.logger.log('Opening an external window from a webview.');
-      return WindowUtil.openExternal(url);
     };
 
     const willNavigateInWebview = (event: ElectronEvent, url: string, baseUrl: string): void => {
@@ -599,8 +637,12 @@ class ElectronWrapperInit {
 
     const enableSpellChecking = settings.restore(SettingsType.ENABLE_SPELL_CHECKING, true);
 
-    app.on('web-contents-created', async (_webviewEvent: ElectronEvent, contents: WebContents) => {
+    app.on('web-contents-created', async (webviewEvent: ElectronEvent, contents: WebContents) => {
       remoteMain.enable(contents);
+      // disable new Windows by default on everything
+      contents.setWindowOpenHandler(() => {
+        return {action: 'deny'};
+      });
       switch (contents.getType()) {
         case 'window': {
           contents.on('will-attach-webview', (_event, webPreferences, params) => {
@@ -615,6 +657,7 @@ class ElectronWrapperInit {
             webPreferences.preload = PRELOAD_RENDERER_JS;
             webPreferences.spellcheck = enableSpellChecking;
             webPreferences.webSecurity = true;
+            webPreferences.sandbox = false;
           });
           break;
         }
@@ -624,7 +667,10 @@ class ElectronWrapperInit {
             await applyProxySettings(proxyInfoArg, contents);
           }
           // Open webview links outside of the app
-          contents.on('new-window', openLinkInNewWindow);
+          contents.setWindowOpenHandler(openLinkInNewWindowHandler);
+          contents.on('did-create-window', async (win, {url, frameName, options}) => {
+            await openLinkInNewWindow(win, url, webviewEvent, frameName, options);
+          });
           contents.on('will-navigate', (event: ElectronEvent, url: string) => {
             willNavigateInWebview(event, url, contents.getURL());
           });
@@ -668,32 +714,6 @@ class ElectronWrapperInit {
           }
 
           contents.session.setCertificateVerifyProc(setCertificateVerifyProc);
-
-          // Override remote Access-Control-Allow-Origin for localhost (CORS bypass)
-          const isLocalhostEnvironment =
-            EnvironmentUtil.getEnvironment() == EnvironmentUtil.BackendType.LOCALHOST.toUpperCase();
-          if (isLocalhostEnvironment) {
-            const filter: WebRequestFilter = {
-              urls: config.backendOrigins.map(value => `${value}/*`),
-            };
-
-            const listenerOnHeadersReceived = (
-              details: OnHeadersReceivedListenerDetails,
-              callback: (response: HeadersReceivedResponse) => void,
-            ): void => {
-              const responseHeaders = {
-                'Access-Control-Allow-Credentials': ['true'],
-                'Access-Control-Allow-Origin': [EnvironmentUtil.URL_WEBAPP.LOCALHOST],
-              };
-
-              callback({
-                cancel: false,
-                responseHeaders: {...details.responseHeaders, ...responseHeaders},
-              });
-            };
-
-            contents.session.webRequest.onHeadersReceived(filter, listenerOnHeadersReceived);
-          }
 
           contents.on('before-input-event', (_event, input) => {
             if (input.type === 'keyUp' && input.key === 'Alt') {

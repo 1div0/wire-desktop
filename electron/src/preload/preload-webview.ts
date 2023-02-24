@@ -18,6 +18,7 @@
  */
 
 import {ipcRenderer, webFrame} from 'electron';
+import {Encoder, Decoder} from 'bazinga64';
 import * as path from 'path';
 import {WebAppEvents} from '@wireapp/webapp-events';
 import type {Availability} from '@wireapp/protocol-messaging';
@@ -39,6 +40,8 @@ interface TeamAccountInfo {
   userID: string;
 }
 
+type Theme = 'dark' | 'default';
+
 const logger = getLogger(path.basename(__filename));
 
 function subscribeToThemeChange(): void {
@@ -57,7 +60,10 @@ function subscribeToThemeChange(): void {
     window.amplify.unsubscribe(WebAppEvents.LIFECYCLE.LOADED, initialThemeCheck);
   }
 
-  window.amplify.subscribe(WebAppEvents.LIFECYCLE.LOADED, initialThemeCheck);
+  window.amplify.subscribe(WebAppEvents.LIFECYCLE.LOADED, () => {
+    ipcRenderer.send(EVENT_TYPE.WEBAPP.APP_LOADED);
+    initialThemeCheck();
+  });
   remote.nativeTheme.on('updated', () => updateWebAppTheme());
 }
 
@@ -129,8 +135,12 @@ const subscribeToWebappEvents = (): void => {
     }
   });
 
-  window.amplify.subscribe(WebAppEvents.PROPERTIES.UPDATE.INTERFACE.THEME, (theme: 'dark' | 'default') => {
+  window.amplify.subscribe(WebAppEvents.PROPERTIES.UPDATE.INTERFACE.THEME, (theme: Theme) => {
     ipcRenderer.sendToHost(EVENT_TYPE.UI.THEME_UPDATE, theme);
+  });
+
+  window.amplify.subscribe(WebAppEvents.PROPERTIES.UPDATED, (properties: {settings: {interface: {theme: Theme}}}) => {
+    ipcRenderer.sendToHost(EVENT_TYPE.UI.THEME_UPDATE, properties.settings.interface.theme);
   });
 };
 
@@ -232,17 +242,14 @@ process.once('loaded', () => {
   global.desktopCapturer = {
     getDesktopSources: opts => ipcRenderer.invoke(EVENT_TYPE.ACTION.GET_DESKTOP_SOURCES, opts),
   };
-  global.secretsCrypto = {
-    decrypt: async (encrypted: Uint8Array): Promise<Uint8Array> => {
-      const encoder = new TextEncoder();
-      const plainText = await ipcRenderer.invoke(EVENT_TYPE.ACTION.DECRYPT, encrypted);
-      return encoder.encode(plainText);
+  global.systemCrypto = {
+    decrypt: async (encrypted: Uint8Array): Promise<string> => {
+      return ipcRenderer.invoke(EVENT_TYPE.ACTION.DECRYPT, encrypted);
     },
-    encrypt: (value: Uint8Array): Promise<Uint8Array> => {
-      const decoder = new TextDecoder();
-      const strValue = decoder.decode(value);
-      return ipcRenderer.invoke(EVENT_TYPE.ACTION.ENCRYPT, strValue);
+    encrypt: (value: string): Promise<Uint8Array> => {
+      return ipcRenderer.invoke(EVENT_TYPE.ACTION.ENCRYPT, value);
     },
+    version: 1,
   };
   global.environment = EnvironmentUtil;
   global.openGraphAsync = getOpenGraphDataViaChannel;
@@ -272,3 +279,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // include context menu
   await import('./menu/preload-context');
 });
+
+// overwrite window.close() to prevent webapp from closing itself
+// see SQSERVICES-1882 and SQSERVICES-1919
+window.close = () => {};
