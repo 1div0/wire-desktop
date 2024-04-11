@@ -17,17 +17,21 @@
  *
  */
 
-import * as assert from 'assert';
 import {ipcRenderer} from 'electron';
-import * as sinon from 'sinon';
-import {EVENT_TYPE} from '../../lib/eventType';
+import {spy} from 'sinon';
+
+import * as assert from 'assert';
+
 import {loadedAboutScreen} from './preload-about';
 
-describe('loadedAboutScreen', () => {
-  it('publishes labels', done => {
-    const sendSpy = sinon.spy(ipcRenderer, 'send');
+import {EVENT_TYPE} from '../../lib/eventType';
 
-    loadedAboutScreen(new Event('test'), {
+describe('loadedAboutScreen', () => {
+  // eslint-disable-next-line jest/no-done-callback
+  it('publishes labels', done => {
+    const sendSpy = spy(ipcRenderer, 'send');
+
+    loadedAboutScreen(null, {
       copyright: '&copy; Wire Swiss GmbH',
       electronVersion: 'Development',
       productName: 'Wire',

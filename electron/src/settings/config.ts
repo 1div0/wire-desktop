@@ -17,8 +17,6 @@
  *
  */
 
-const wireJson: WireJson = require('../../wire.json');
-
 interface WireJson {
   aboutReleasesUrl: string;
   aboutUpdatesUrl: string;
@@ -42,6 +40,8 @@ interface WireJson {
   websiteUrl: string;
 }
 
+const wireJson: WireJson = require('../../wire.json');
+
 export const MINUTE_IN_MILLIS = 60 * 1000;
 export const HOUR_IN_MILLIS = 60 * MINUTE_IN_MILLIS;
 
@@ -62,6 +62,7 @@ enum ARGUMENT {
   STARTUP = 'startup',
   USER_DATA_DIR = 'user_data_dir',
   VERSION = 'version',
+  DLPATH = 'dlpath',
 }
 
 export const config = {

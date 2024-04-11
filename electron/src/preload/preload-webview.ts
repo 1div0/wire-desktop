@@ -18,15 +18,17 @@
  */
 
 import {ipcRenderer, webFrame} from 'electron';
-import {Encoder, Decoder} from 'bazinga64';
-import * as path from 'path';
-import {WebAppEvents} from '@wireapp/webapp-events';
-import type {Availability} from '@wireapp/protocol-messaging';
 import type {Data as OpenGraphResult} from 'open-graph';
+
+import * as path from 'path';
+
+import type {Availability} from '@wireapp/protocol-messaging';
+import {WebAppEvents} from '@wireapp/webapp-events';
 
 import {EVENT_TYPE} from '../lib/eventType';
 import {getLogger} from '../logging/getLogger';
 import * as EnvironmentUtil from '../runtime/EnvironmentUtil';
+
 const remote = require('@electron/remote');
 
 interface TeamAccountInfo {
@@ -126,6 +128,12 @@ const subscribeToWebappEvents = (): void => {
       `"${JSON.stringify(debugInfo)}", forwarding event ...`,
     );
     ipcRenderer.sendToHost(EVENT_TYPE.ACCOUNT.UPDATE_INFO, info);
+  });
+
+  window.amplify.subscribe(WebAppEvents.TEAM.DOWNLOAD_PATH_UPDATE, (downloadPath?: string) => {
+    logger.info(`Received amplify event ${WebAppEvents.TEAM.DOWNLOAD_PATH_UPDATE}:`, `"${downloadPath}",`);
+    logger.info('forwarding last event ...');
+    ipcRenderer.send(EVENT_TYPE.ACTION.CHANGE_DOWNLOAD_LOCATION, downloadPath);
   });
 
   window.addEventListener(WebAppEvents.LIFECYCLE.CHANGE_ENVIRONMENT, event => {

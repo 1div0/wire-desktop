@@ -3,6 +3,7 @@
     "jasmine": true
   },
   "extends": "@wireapp/eslint-config",
+  "ignorePatterns": ["**/*.js", "**/*.jsx"], // Ignore JS files until we migrate to TS
   "overrides": [
     {
       "files": ["*.ts", "*.tsx"],
@@ -14,12 +15,25 @@
     }
   ],
   "parserOptions": {
-    "project": ["./tsconfig.json", "./tsconfig.bin.json", "./tsconfig.mocha.json"]
+    "project": ["./tsconfig.json", "./tsconfig.mocha.json", "./tsconfig.bin.json"]
   },
   "plugins": ["jasmine"],
   "rules": {
     "import/no-default-export": "off",
     "no-magic-numbers": "off",
-    "no-undef": "off"
+    "no-undef": "off",
+    "jest/expect-expect": [
+      "error",
+      {
+        "assertFunctionNames": ["expect", "fc.assert", "assert"]
+      }
+    ]
+  },
+  "settings": {
+    "import/resolver": {
+      "node": {
+        "extensions": [".js", ".jsx", ".ts", ".tsx"]
+      }
+    }
   }
 }

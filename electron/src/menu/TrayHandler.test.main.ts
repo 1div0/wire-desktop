@@ -17,10 +17,11 @@
  *
  */
 
-import * as assert from 'assert';
 import {BrowserWindow, Tray} from 'electron';
+import {match, spy, assert as sinonAssert} from 'sinon';
+
+import * as assert from 'assert';
 import * as path from 'path';
-import * as sinon from 'sinon';
 
 import {TrayHandler} from './TrayHandler';
 
@@ -37,7 +38,7 @@ describe('TrayHandler', () => {
       assert.strictEqual(tray['icons']!.badge.constructor.name, 'NativeImage');
       assert.strictEqual(tray['icons']!.tray.constructor.name, 'NativeImage');
       assert.strictEqual(tray['icons']!.trayWithBadge.constructor.name, 'NativeImage');
-      sinon.assert.match(tray['trayIcon']!, sinon.match.defined);
+      sinonAssert.match(tray['trayIcon']!, match.defined);
     });
   });
 
@@ -48,7 +49,7 @@ describe('TrayHandler', () => {
         tray.initTray(TrayMock);
 
         const appWindow = new BrowserWindow();
-        const flashFrameSpy = sinon.spy(appWindow, 'flashFrame');
+        const flashFrameSpy = spy(appWindow, 'flashFrame');
 
         await appWindow.loadURL('about:blank');
         assert.strictEqual(appWindow.isFocused(), true);
@@ -68,7 +69,7 @@ describe('TrayHandler', () => {
         tray.initTray(TrayMock);
 
         const appWindow = new BrowserWindow();
-        const flashFrameSpy = sinon.spy(appWindow, 'flashFrame');
+        const flashFrameSpy = spy(appWindow, 'flashFrame');
 
         await appWindow.loadFile(path.join(fixturesDir, 'badge.html'));
         assert.strictEqual(appWindow.isFocused(), true);
@@ -88,7 +89,7 @@ describe('TrayHandler', () => {
           useContentSize: true,
         });
 
-        const flashFrameSpy = sinon.spy(appWindow, 'flashFrame');
+        const flashFrameSpy = spy(appWindow, 'flashFrame');
 
         await appWindow.loadURL('about:blank');
         assert.strictEqual(appWindow.isFocused(), false);
@@ -107,7 +108,7 @@ describe('TrayHandler', () => {
           useContentSize: true,
         });
 
-        const flashFrameSpy = sinon.spy(appWindow, 'flashFrame');
+        const flashFrameSpy = spy(appWindow, 'flashFrame');
 
         await appWindow.loadURL('about:blank');
         assert.strictEqual(appWindow.isFocused(), false);
